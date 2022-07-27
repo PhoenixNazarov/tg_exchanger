@@ -14,12 +14,15 @@ def check_register(message):
 
 
 class FSMRegistration(StatesGroup):
+    get_username = State()
     get_telephone = State()
 
 
+@dp.message_handler(state = FSMRegistration.get_username)
 @dp.message_handler(lambda message: not check_register(message), commands=['start'], state = '*')
 async def send_welcome(message: types.Message, state):
-    if message.from_user.username == 'none':
+    await FSMRegistration.get_username.set()
+    if message.from_user.username is None:
         return await message.answer(**start_screen_username_not)
     with session_factory() as session:
         user = User()
@@ -46,4 +49,4 @@ async def send_welcome(message: types.Message, state):
         session.commit()
 
     await state.finish()
-    await message.answer(**main_screen)
+    await message.answer(**main_screen, reply_markup = types.ReplyKeyboardRemove())

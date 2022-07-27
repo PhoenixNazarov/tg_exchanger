@@ -1,10 +1,14 @@
 import enum
 
 from sqlalchemy import Column, Float, ForeignKey, Enum, Integer
+from sqlalchemy.orm import relationship
 from strenum import StrEnum
 
 from config import *
 from .base import BaseModelWithId
+
+
+from .transaction_message import MessageTransaction
 
 
 class Currency(StrEnum):
@@ -20,16 +24,18 @@ fiat_currency = [str(Currency.USDT), str(Currency.RUB)]
 class TransStatus(enum.Enum):
     in_stack = 0
     in_exchange = 1
+    wait_good_user = 2
     canceled = -1
-    good_finished = 2
+    good_finished = -2
 
-    bad_finished_by_user = -2
-    bad_finished_by_merchant = -3
+    bad_finished_by_user = -6
+    bad_finished_by_merchant = -7
 
 
 get_russian_status = {
     TransStatus.in_stack: 'Ожидание мерчанта',
     TransStatus.in_exchange: 'В работе',
+    TransStatus.wait_good_user: 'Ожидание подтверждения пользователя',
     TransStatus.good_finished: 'Завершёна',
     TransStatus.canceled: 'Отменена'
 }
@@ -52,6 +58,8 @@ class Transaction(BaseModelWithId):
 
     status = Column(Enum(TransStatus), default = TransStatus.in_stack)
     merchant_message_id = Column(Integer)
+
+    messages = relationship(MessageTransaction, backref = 'transactions')
 
     def __init__(self, amount, have_currency, get_currency, rate, auth_user, *args, **kwargs):
         super().__init__(*args, **kwargs)

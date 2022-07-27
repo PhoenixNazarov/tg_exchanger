@@ -11,8 +11,8 @@ class User(BaseModel):
 
     language = Column(Text, nullable = False)
     username = Column(Text, nullable = False, unique = True)
-    first_name = Column(Text, nullable = False)
-    last_name = Column(Text, nullable = False)
+    first_name = Column(Text, nullable = True)
+    last_name = Column(Text, nullable = True)
 
     phone = Column(Text, nullable = True, unique = True)
     auth = Column(Boolean, default = False)

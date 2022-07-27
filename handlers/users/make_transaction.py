@@ -95,8 +95,6 @@ async def public_transaction(query: types.CallbackQuery, callback_data: dict):
         await bot.edit_message_text(**get_screen_transaction_user(transaction), chat_id = query.message.chat.id,
                                     message_id = query.message.message_id)
 
-        merchant_message = await bot.send_message(chat_id = MERCHANT_CHANNEL,
-                                                  text = get_transaction_merchant(transaction),
-                                                  reply_markup = get_transaction_keyboard(transaction))
+        merchant_message = await bot.send_message(chat_id = MERCHANT_CHANNEL, **get_transaction_channel(transaction))
         transaction.merchant_message_id = merchant_message.message_id
         session.commit()

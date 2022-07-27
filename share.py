@@ -1,12 +1,14 @@
 from aiogram import Bot, Dispatcher, executor, md, types
-from aiogram.contrib.fsm_storage.memory import MemoryStorage
+from aiogram.contrib.fsm_storage.redis import RedisStorage2
 from config import *
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, scoped_session
 
+
+storage = RedisStorage2('localhost', 49153, password = 'redispw')
 bot = Bot(token=API_TOKEN)
-dp = Dispatcher(bot, storage = MemoryStorage())
+dp = Dispatcher(bot, storage = storage)
 
 
 engine = create_engine(SQL_PATH)
