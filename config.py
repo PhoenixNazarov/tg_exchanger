@@ -8,5 +8,12 @@ USER_COMMISSION = 0
 AUTH_USER_COMMISSION = 0
 MERCHANT_COMMISSION = 0.1
 
-
 MAIN_COMMANDS = ['/newtrans', '/mytrans']
+
+TOWNS = {
+    "Phuket": ["Rawai", "Chalong", "Karta", "Karon", "Patong", "Kamala", "Surin", "Bangtao", "Laguna", "Katu"],
+    "Phangan": ["Haad Yao", "Haad Salad"],
+    "Koh Samui": ["Chawang", "Beach"]
+}
+
+BANKS = ["Krungsri", "Bangkok Bank", "Kasikorn Bank"]

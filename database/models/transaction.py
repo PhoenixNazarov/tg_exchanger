@@ -6,19 +6,21 @@ from strenum import StrEnum
 
 from config import *
 from .base import BaseModelWithId
-
-
 from .transaction_message import MessageTransaction
+from .transaction_requisits import RequisitesCash, RequisitesBankBalance
 
 
 class Currency(StrEnum):
     BAT = 'BAT'
     RUB = 'RUB'
     USDT = 'USDT'
+    USDC = 'USDC'
 
 
-all_currency = [str(Currency.USDT), str(Currency.RUB), str(Currency.BAT)]
-fiat_currency = [str(Currency.USDT), str(Currency.RUB)]
+not_stable_currency = [Currency.RUB]
+
+all_currency = [str(Currency.USDT), str(Currency.USDC), str(Currency.RUB), str(Currency.BAT)]
+fiat_currency = [str(Currency.USDT), str(Currency.USDC), str(Currency.RUB)]
 
 
 class TransStatus(enum.Enum):
@@ -30,6 +32,13 @@ class TransStatus(enum.Enum):
 
     bad_finished_by_user = -6
     bad_finished_by_merchant = -7
+
+
+class TransGet(StrEnum):
+    none = 'none'
+    cash = 'cash'
+    atm_machine = 'atm_machine'
+    bank_balance = 'bank_balance'
 
 
 get_russian_status = {
@@ -59,29 +68,8 @@ class Transaction(BaseModelWithId):
     status = Column(Enum(TransStatus), default = TransStatus.in_stack)
     merchant_message_id = Column(Integer)
 
+    get_thb_type = Column(Enum(TransGet), nullable = False)
+    req_cash = relationship(RequisitesCash, backref = 'transactions', uselist = False)
+    req_bank = relationship(RequisitesBankBalance, backref = 'transactions', uselist = False)
+
     messages = relationship(MessageTransaction, backref = 'transactions')
-
-    def __init__(self, amount, have_currency, get_currency, rate, auth_user, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.have_amount = amount
-        self.have_currency = have_currency
-        self.get_currency = get_currency
-        self.rate = rate
-
-        if have_currency == Currency.RUB and get_currency == Currency.BAT:
-            get_amount = round(amount / rate, 2)
-        elif have_currency == Currency.BAT and get_currency == Currency.RUB:
-            get_amount = round(amount * rate, 2)
-        elif have_currency == Currency.USDT and get_currency == Currency.BAT:
-            get_amount = round(amount * rate, 2)
-        elif have_currency == Currency.BAT and get_currency == Currency.USDT:
-            get_amount = round(amount / rate, 2)
-        else:
-            raise f"pair {have_currency} -> {get_currency} not allowed"
-
-        commission = round(get_amount * (AUTH_USER_COMMISSION if auth_user else USER_COMMISSION / 100), 2)
-        get_amount_without_commission = round(get_amount - commission, 2)
-
-        self.get_amount = get_amount_without_commission
-        self.commission_user = commission
-        self.commission_merchant = round(self.have_amount * (MERCHANT_COMMISSION / 100), 2)

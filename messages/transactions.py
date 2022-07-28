@@ -5,9 +5,37 @@ from sqlalchemy import or_
 from strenum import StrEnum
 
 from database.models import Transaction, User
-from database.models.transaction import TransStatus
+from database.models.transaction import TransStatus, TransGet
 from database.models.transaction import get_russian_status
+from messages.users import transaction_get
 from share import session_factory
+
+
+# GET THB
+def get_transaction_type_thb_detail(transaction: Transaction):
+    if transaction.get_thb_type == TransGet.cash:
+        return f'\n💳 Тип получения: {transaction_get[TransGet.cash]}' \
+               f'\n🏙: {transaction.req_cash.town}, {transaction.req_cash.region}'
+    elif transaction.get_thb_type == TransGet.atm_machine:
+        return f'\n💳 Тип получения: {transaction_get[TransGet.atm_machine]}'
+    elif transaction.get_thb_type == TransGet.bank_balance:
+        return f'\n💳 Тип получения: {transaction_get[TransGet.bank_balance]}' \
+               f'\n🏦: {transaction.req_bank.bank_name} {transaction.req_bank.number}' \
+               f'\n👨‍💼: {transaction.req_bank.name}'
+    return ''
+
+
+def get_transaction_type_thb_short(transaction: Transaction):
+    if transaction.get_thb_type == TransGet.cash:
+        return f'\n💳 Тип получения: {transaction_get[TransGet.cash]}' \
+               f'\n🏙: {transaction.req_cash.town}, {transaction.req_cash.region}'
+    elif transaction.get_thb_type == TransGet.atm_machine:
+        return f'\n💳 Тип получения: {transaction_get[TransGet.atm_machine]}'
+    elif transaction.get_thb_type == TransGet.bank_balance:
+        return f'\n💳 Тип получения: {transaction_get[TransGet.bank_balance]}' \
+               f'\n🏦: {transaction.req_bank.bank_name}'
+    return ''
+
 
 # MERCHANT CHANNEL
 accept_trans_merchant = CallbackData('mtrans', 'id', 'accept', 'ban')
@@ -30,7 +58,8 @@ def get_transaction_merchant_in_stack(transaction: Transaction):
                 f'\n🤝 Отдаёте: {transaction.get_amount} {transaction.get_currency}'
         # f'\n💸 Комиссия пользователя: {transaction.commission_user} {transaction.get_currency}'
                 f'\n💸 Комиссия мерчанта: {transaction.commission_merchant} {transaction.have_currency}'
-                f'\n📉 Курс: {transaction.rate}',
+                f'\n📉 Курс: {transaction.rate}'
+                f'{get_transaction_type_thb_short(transaction)}',
         # f'\n' \
         # f'\n👔 Пользователь: @{user.username}' \
         # f'\n📱: {user.phone}' \
@@ -56,6 +85,7 @@ def get_transaction_merchant_in_exchange(transaction: Transaction):
             # f'\n💸 Комиссия пользователя: {transaction.commission_user} {transaction.get_currency}'
                     f'\n💸 Комиссия мерчанта: {transaction.commission_merchant} {transaction.have_currency}'
                     f'\n📉 Курс: {transaction.rate}'
+                    f'{get_transaction_type_thb_short(transaction)}'
                     f'\n👨‍💼 Мерчант: @{user.username}'
             # f'\n' \
             # f'\n👔 Пользователь: @{user.username}' \
@@ -110,7 +140,8 @@ def get_transaction_merchant_in_exc(transaction: Transaction):
            f'\n🤝 Отдаёте: {transaction.get_amount} {transaction.get_currency}' \
            f'\n💸 Комиссия мерчанта: {transaction.commission_merchant} {transaction.have_currency}' \
            f'\n📉 Курс: {transaction.rate}' \
-           f'\n👔 Статус: {get_russian_status[transaction.status]}'
+           f'\n👔 Статус: {get_russian_status[transaction.status]}' \
+           f'{get_transaction_type_thb_detail(transaction)}'
 
 
 # f'\n💸 Комиссия пользователя: {transaction.commission_user} {transaction.get_currency}'
@@ -149,7 +180,9 @@ def get_transaction_user(transaction: Transaction):
            f'\n🤝 Отдаёте: {transaction.have_amount} {transaction.have_currency}' \
            f'\n🤝 Получаете: {transaction.get_amount} {transaction.get_currency}' \
            f'\n📉 Курс: {transaction.rate}' \
-           f'\n👔 Статус: {get_russian_status[transaction.status]}'
+           f'\n👔 Статус: {get_russian_status[transaction.status]}' \
+           f'{get_transaction_type_thb_detail(transaction)}'
+
     if transaction.status == TransStatus.in_stack:
         position = 0
         with session_factory() as session:
@@ -171,7 +204,8 @@ def get_transaction_user_in_exchange(transaction: Transaction):
            f'\n🤝 Отдаёте: {transaction.have_amount} {transaction.have_currency}' \
            f'\n🤝 Получаете: {transaction.get_amount} {transaction.get_currency}' \
            f'\n📉 Курс: {transaction.rate}' \
-           f'\n👔 Статус: {get_russian_status[transaction.status]}'
+           f'\n👔 Статус: {get_russian_status[transaction.status]}' \
+           f'{get_transaction_type_thb_detail(transaction)}'
 
 
 havenot_transactions = {

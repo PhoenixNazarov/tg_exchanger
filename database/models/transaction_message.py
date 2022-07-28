@@ -1,7 +1,4 @@
 from sqlalchemy import Column, Float, ForeignKey, Enum, Integer, Text, Boolean
-from strenum import StrEnum
-
-from config import *
 from .base import BaseModelWithId
 
 

@@ -2,10 +2,12 @@ from aiogram import types
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
 
+import config
 from config import MERCHANT_CHANNEL
 from messages.transactions import *
 from messages.users import *
 from share import dp, bot, session_maker
+from database.models.transaction_requisits import *
 
 
 class FSMTransaction(StatesGroup):
@@ -13,6 +15,19 @@ class FSMTransaction(StatesGroup):
     get_currency = State()
     amount = State()
     rate = State()
+
+    type_get_thb = State()
+
+
+class FSMCash(StatesGroup):
+    town = State()
+    region = State()
+
+
+class FSMBank(StatesGroup):
+    bank = State()
+    number = State()
+    name = State()
 
 
 @dp.message_handler(commands = ['newtrans'], state = '*')
@@ -67,6 +82,33 @@ async def load_amount(message: types.Message, state: FSMContext):
     await FSMTransaction.next()
 
 
+async def send_pre_transaction(message: types.Message, callback_data):
+    with session_maker() as session:
+        user = session.query(User).get(message.from_user.id)
+        trans: TransactionModerate = TransactionModerate(
+            amount = callback_data['amount'],
+            have_currency = callback_data['have_currency'],
+            get_currency = callback_data['get_currency'],
+            rate = callback_data['rate'],
+            auth_user = user.auth
+        )
+        trans.user_id = user.id
+        trans.get_thb_type = callback_data['type_get_thb']
+        if trans.get_thb_type == TransGet.cash:
+            trans.option1 = callback_data['town']
+            trans.option2 = callback_data['region']
+        elif trans.get_thb_type == TransGet.atm_machine:
+            pass
+        elif trans.get_thb_type == TransGet.bank_balance:
+            trans.option1 = callback_data['bank']
+            trans.option2 = callback_data['number']
+            trans.option3 = callback_data['name']
+
+        session.add(trans)
+        session.commit()
+        await message.answer(**make_transaction_show(trans))
+
+
 @dp.message_handler(state = FSMTransaction.rate)
 async def load_rate(message: types.Message, state: FSMContext):
     if not correct_number(message.text):
@@ -74,27 +116,143 @@ async def load_rate(message: types.Message, state: FSMContext):
 
     async with state.proxy() as data:
         data['rate'] = float(message.text.replace(',', '.'))
-        await message.answer(**make_transaction_show(*dict(data).values()))
+
+        if data['have_currency'] == Currency.BAT:
+            data['type_get_thb'] = TransGet.none
+            await send_pre_transaction(message, dict(data))
+        else:
+            await message.answer(**make_transaction_get_type_thb())
+            await FSMTransaction.next()
+
+
+@dp.message_handler(state = FSMTransaction.type_get_thb)
+async def load_type_get_thb(message: types.Message, state: FSMContext):
+    if message.text not in transaction_get.values():
+        return await message.answer(**make_transaction_get_type_thb())
+
+    async with state.proxy() as data:
+        for _type in transaction_get:
+            if transaction_get[_type] == message.text:
+                data['type_get_thb'] = _type
+
+        if data['type_get_thb'] == TransGet.cash:
+            await FSMCash.town.set()
+            await message.answer(**make_transaction_town())
+
+        elif data['type_get_thb'] == TransGet.atm_machine:
+            await message.answer(**make_transaction_end())
+            await send_pre_transaction(message, dict(data))
+
+        elif data['type_get_thb'] == TransGet.bank_balance:
+            await FSMBank.bank.set()
+            return await message.answer(**make_transaction_bank())
+
+
+@dp.message_handler(state = FSMCash.town)
+async def load_town(message: types.Message, state: FSMContext):
+    if message.text not in config.TOWNS:
+        return await message.answer(**make_transaction_town())
+
+    async with state.proxy() as data:
+        data['town'] = message.text
+
+    await FSMCash.next()
+    await message.answer(**make_transaction_region(message.text))
+
+
+@dp.message_handler(state = FSMCash.region)
+async def load_region(message: types.Message, state: FSMContext):
+    async with state.proxy() as data:
+        if message.text not in config.TOWNS[data['town']]:
+            return await message.answer(**make_transaction_region(data['town']))
+        data['region'] = message.text
+
+        await message.answer(**make_transaction_end())
+        await send_pre_transaction(message, dict(data))
     await state.finish()
+
+
+@dp.message_handler(state = FSMBank.bank)
+async def load_bank(message: types.Message, state: FSMContext):
+    if message.text not in config.BANKS:
+        return await message.answer(**make_transaction_bank())
+
+    async with state.proxy() as data:
+        data['bank'] = message.text
+
+    await message.answer(**make_transaction_number())
+    await FSMBank.next()
+
+
+@dp.message_handler(state = FSMBank.number)
+async def load_number(message: types.Message, state: FSMContext):
+    if len(message.text) != 9:
+        return await message.answer(**make_transaction_number())
+    try:
+        int(message.text)
+    except ValueError:
+        return await message.answer(**make_transaction_number())
+
+    async with state.proxy() as data:
+        data['number'] = message.text
+
+    await message.answer(**make_transaction_name())
+    await FSMBank.next()
+
+
+@dp.message_handler(state = FSMBank.name)
+async def load_name(message: types.Message, state: FSMContext):
+    async with state.proxy() as data:
+        data['name'] = message.text
+
+        await message.answer(**make_transaction_end())
+        await send_pre_transaction(message, dict(data))
+        await state.finish()
 
 
 @dp.callback_query_handler(make_transaction_cd.filter(), state = '*')
 async def public_transaction(query: types.CallbackQuery, callback_data: dict):
-    callback_data['amount'] = float(callback_data['amount'])
-    callback_data['rate'] = float(callback_data['rate'])
-    callback_data.pop('@')
-
-    transaction: Transaction
     with session_maker() as session:
-        transaction = Transaction(**callback_data, auth_user = session.query(User).get(query.from_user.id).auth)
-        transaction.user_id = query.from_user.id
-        session.add(transaction)
-        session.commit()
-        transaction = session.query(Transaction).get(transaction.id)
+        transaction_moderate: TransactionModerate = session.query(TransactionModerate).get(callback_data['id'])
 
-        await bot.edit_message_text(**get_screen_transaction_user(transaction), chat_id = query.message.chat.id,
-                                    message_id = query.message.message_id)
+        if int(callback_data['public']):
+            transaction: Transaction = Transaction()
+            transaction.user_id = query.from_user.id
+            transaction.have_amount = transaction_moderate.have_amount
+            transaction.have_currency = transaction_moderate.have_currency
+            transaction.get_amount = transaction_moderate.get_amount
+            transaction.get_currency = transaction_moderate.get_currency
+            transaction.rate = transaction_moderate.rate
 
-        merchant_message = await bot.send_message(chat_id = MERCHANT_CHANNEL, **get_transaction_channel(transaction))
-        transaction.merchant_message_id = merchant_message.message_id
-        session.commit()
+            transaction.commission_user = transaction_moderate.commission_user
+            transaction.commission_merchant = transaction_moderate.commission_merchant
+            transaction.get_thb_type = transaction_moderate.get_thb_type
+
+            session.add(transaction)
+            session.commit()
+            if transaction.get_thb_type == TransGet.cash:
+                reqCash = RequisitesCash()
+                reqCash.transaction_id = transaction.id
+                reqCash.town = transaction_moderate.option1
+                reqCash.region = transaction_moderate.option2
+                session.add(reqCash)
+                session.commit()
+            elif transaction.get_thb_type == TransGet.bank_balance:
+                reqBank = RequisitesBankBalance()
+                reqBank.transaction_id = transaction.id
+                reqBank.bank_name = transaction_moderate.option1
+                reqBank.number = transaction_moderate.option2
+                reqBank.name = transaction_moderate.option3
+                session.add(reqBank)
+                session.commit()
+
+            await bot.edit_message_text(**get_screen_transaction_user(transaction), chat_id = query.message.chat.id,
+                                        message_id = query.message.message_id)
+
+            merchant_message = await bot.send_message(chat_id = MERCHANT_CHANNEL, **get_transaction_channel(transaction))
+            transaction.merchant_message_id = merchant_message.message_id
+            session.commit()
+        else:
+            await bot.delete_message(chat_id = query.from_user.id, message_id = query.message.message_id)
+
+        session.delete(transaction_moderate)
