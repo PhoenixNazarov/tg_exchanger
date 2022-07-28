@@ -86,10 +86,41 @@ async def transaction_action(query: types.CallbackQuery, callback_data: dict, st
             pass
 
         elif callback_data['action'] == TransAction.accept:
-            pass
+            await bot.edit_message_text(chat_id = query.from_user.id, message_id = query.message.message_id,
+                                        **accept_status(transaction, transaction.merchant_id == query.from_user.id))
 
 
-@dp.message_handler(state = FSMMessage.write_message)
+@dp.callback_query_handler(transaction_messages_accept_proof.filter(), state = '*')
+async def accept_transaction(query: types.CallbackQuery, callback_data: dict, state):
+    with session_maker() as session:
+        transaction: Transaction = session.query(Transaction).get(int(callback_data['id']))
+
+        if transaction.merchant_id == query.from_user.id:
+            if transaction.status == TransStatus.in_exchange:
+                transaction.status = TransStatus.wait_good_user
+                session.commit()
+                await bot.send_message(chat_id = transaction.user_id, **get_accept_status(transaction, False))
+            else:
+                await query.answer(cant_accept)
+            await bot.edit_message_text(chat_id = query.from_user.id, message_id = query.message.message_id,
+                                        **get_transaction_merchant(transaction))
+
+        elif transaction.user_id == query.from_user.id:
+            if transaction.status == TransStatus.wait_good_user:
+                transaction.status = TransStatus.good_finished
+                session.commit()
+                await bot.delete_message(chat_id = MERCHANT_CHANNEL, message_id = transaction.merchant_message_id)
+                await bot.send_message(chat_id = transaction.merchant_id, **get_accept_status(transaction, True))
+            else:
+                await query.answer(cant_accept)
+            await bot.edit_message_text(chat_id = query.from_user.id, message_id = query.message.message_id,
+                                        **get_screen_transaction_user(transaction))
+
+        else:
+            await query.answer(cant_accept)
+
+
+@dp.message_handler(lambda message: message.text not in MAIN_COMMANDS, state = FSMMessage.write_message)
 async def write_message(message: types.Message, state):
     async with state.proxy() as data:
         trans_id = data['id']

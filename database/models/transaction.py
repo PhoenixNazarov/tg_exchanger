@@ -36,7 +36,7 @@ get_russian_status = {
     TransStatus.in_stack: 'Ожидание мерчанта',
     TransStatus.in_exchange: 'В работе',
     TransStatus.wait_good_user: 'Ожидание подтверждения пользователя',
-    TransStatus.good_finished: 'Завершёна',
+    TransStatus.good_finished: 'Завершена',
     TransStatus.canceled: 'Отменена'
 }
 

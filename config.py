@@ -7,3 +7,6 @@ SQL_PATH = 'sqlite:///data/database.db'
 USER_COMMISSION = 0
 AUTH_USER_COMMISSION = 0
 MERCHANT_COMMISSION = 0.1
+
+
+MAIN_COMMANDS = ['/newtrans', '/mytrans']

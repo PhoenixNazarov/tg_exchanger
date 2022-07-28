@@ -1,9 +1,8 @@
-from strenum import StrEnum
-
+import aiogram.utils.markdown as fmt
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.callback_data import CallbackData
 from sqlalchemy import or_
-import aiogram.utils.markdown as fmt
+from strenum import StrEnum
 
 from database.models import Transaction, User
 from database.models.transaction import TransStatus
@@ -65,24 +64,56 @@ def get_transaction_merchant_in_exchange(transaction: Transaction):
         }
 
 
+# MERGE
+def accept_status(transaction: Transaction, merchant):
+    accept_status = 'Вы получили денежные средства?'
+    return {
+        'text':
+            accept_status + '\n' +
+            get_transaction_merchant_in_exc(transaction) if merchant else get_transaction_user_in_exchange(
+                transaction),
+        'reply_markup': get_transaction_keyboard_accept(transaction)
+    }
+
+
+cant_accept = 'Нельзя изменить статус для этой заявки'
+
+
+def get_accept_status(transaction, merchant):
+    accept_message = 'Статус заявки изменён'
+    screen = get_transaction_merchant(transaction) if merchant else get_screen_transaction_user(transaction)
+    screen['text'] = accept_message + '\n' + screen['text']
+    return screen
+
+
 # MERCHANT
 def get_transaction_merchant(transaction):
     if transaction.status == TransStatus.in_exchange:
-        return get_transaction_merchant_in_exc(transaction)
+        return {
+            'text': get_transaction_merchant_in_exc(transaction),
+            'reply_markup': get_transaction_keyboard_main(transaction, True)
+        }
     elif transaction.status == TransStatus.wait_good_user:
-        return get_transaction_merchant_in_exc(transaction)
+        return {
+            'text': get_transaction_merchant_in_exc(transaction),
+            'reply_markup': get_transaction_keyboard_main(transaction, True)
+        }
+    elif transaction.status == TransStatus.good_finished:
+        return {
+            'text': get_transaction_merchant_in_exc(transaction),
+        }
 
 
 def get_transaction_merchant_in_exc(transaction: Transaction):
-    return {
-        'text': f'Заявка #{transaction.id}'
-                f'\n🤝 Получаете: {transaction.have_amount} {transaction.have_currency}'
-                f'\n🤝 Отдаёте: {transaction.get_amount} {transaction.get_currency}'
-        # f'\n💸 Комиссия пользователя: {transaction.commission_user} {transaction.get_currency}'
-                f'\n💸 Комиссия мерчанта: {transaction.commission_merchant} {transaction.have_currency}'
-                f'\n📉 Курс: {transaction.rate}',
-        'reply_markup': get_transaction_keyboard_main(transaction, True)
-    }
+    return f'Заявка #{transaction.id}' \
+           f'\n🤝 Получаете: {transaction.have_amount} {transaction.have_currency}' \
+           f'\n🤝 Отдаёте: {transaction.get_amount} {transaction.get_currency}' \
+           f'\n💸 Комиссия мерчанта: {transaction.commission_merchant} {transaction.have_currency}' \
+           f'\n📉 Курс: {transaction.rate}' \
+           f'\n👔 Статус: {get_russian_status[transaction.status]}'
+
+
+# f'\n💸 Комиссия пользователя: {transaction.commission_user} {transaction.get_currency}'
 
 
 # MAKER
@@ -93,9 +124,19 @@ def get_screen_transaction_user(transaction: Transaction):
             'reply_markup': get_transaction_keyboard_cancel(transaction)
         }
     elif transaction.status == TransStatus.in_exchange:
-        return get_transaction_user_in_exchange(transaction)
+        return {
+            'text': get_transaction_user_in_exchange(transaction),
+            'reply_markup': get_transaction_keyboard_main(transaction)
+        }
     elif transaction.status == TransStatus.wait_good_user:
-        return get_transaction_user_in_exchange(transaction)
+        return {
+            'text': get_transaction_user_in_exchange(transaction),
+            'reply_markup': get_transaction_keyboard_main(transaction)
+        }
+    elif transaction.status == TransStatus.good_finished:
+        return {
+            'text': get_transaction_merchant_in_exc(transaction),
+        }
     elif transaction.status == TransStatus.canceled:
         return {
             'text': get_transaction_user(transaction)
@@ -126,15 +167,11 @@ def get_transaction_user(transaction: Transaction):
 
 
 def get_transaction_user_in_exchange(transaction: Transaction):
-    text = f'Заявка #{transaction.id}' \
+    return f'Заявка #{transaction.id}' \
            f'\n🤝 Отдаёте: {transaction.have_amount} {transaction.have_currency}' \
            f'\n🤝 Получаете: {transaction.get_amount} {transaction.get_currency}' \
            f'\n📉 Курс: {transaction.rate}' \
            f'\n👔 Статус: {get_russian_status[transaction.status]}'
-    return {
-        'text': text,
-        'reply_markup': get_transaction_keyboard_main(transaction)
-    }
 
 
 havenot_transactions = {
@@ -207,6 +244,16 @@ def get_transaction_keyboard_main(transaction: Transaction, merchant=False):
     return keyboard
 
 
+def get_transaction_keyboard_accept(transaction: Transaction, merchant=False):
+    keyboard = InlineKeyboardMarkup()
+    keyboard.row(
+        InlineKeyboardButton('✅ Подтвердить',
+                             callback_data = transaction_messages_accept_proof.new(id = transaction.id, proof = 1)),
+        InlineKeyboardButton('ℹ Заявка',
+                             callback_data = transaction_messages.new(id = transaction.id, action = TransAction.main)))
+    return keyboard
+
+
 # MESSAGES
 havenot_messages = 'Не найдено сообщений'
 write_transaction_message = 'Напишите ваше сообщение'
@@ -222,9 +269,9 @@ def get_transaction_message(transaction: Transaction, message):
                 f'\n{description}'
                 f'\n\n{message.text}',
         'reply_markup': InlineKeyboardMarkup().row(
-            InlineKeyboardButton('📩 Ответить', callback_data=transaction_messages.new(
+            InlineKeyboardButton('📩 Ответить', callback_data = transaction_messages.new(
                 id = transaction.id, action = TransAction.write_message)),
-            InlineKeyboardButton('ℹ Заявка', callback_data=transaction_messages.new(
+            InlineKeyboardButton('ℹ Заявка', callback_data = transaction_messages.new(
                 id = transaction.id, action = TransAction.main)),
         )
     }
