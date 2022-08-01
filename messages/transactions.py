@@ -106,12 +106,25 @@ def accept_status(transaction: Transaction, merchant):
     }
 
 
+def cant_write():
+    return {
+        'text': 'Нельзя написать сообщение, заявка окончена'
+    }
+
+
 cant_accept = 'Нельзя изменить статус для этой заявки'
 
 
 def get_accept_status(transaction, merchant):
     accept_message = 'Статус заявки изменён'
     screen = get_transaction_merchant(transaction) if merchant else get_screen_transaction_user(transaction)
+    screen['text'] = accept_message + '\n' + screen['text']
+    return screen
+
+
+def get_transaction_merchant_edit(transaction):
+    accept_message = 'Пользователь обновил заявку'
+    screen = get_transaction_merchant(transaction)
     screen['text'] = accept_message + '\n' + screen['text']
     return screen
 
@@ -148,6 +161,10 @@ def get_transaction_merchant_in_exc(transaction: Transaction):
 
 
 # MAKER
+edit_trans_user_p = CallbackData('edittrans_p', 'id')
+edit_trans_user = CallbackData('edittrans', 'id', 'have_amount', 'rate', 'get_amount')
+
+
 def get_screen_transaction_user(transaction: Transaction):
     if transaction.status == TransStatus.in_stack:
         return {
@@ -208,6 +225,41 @@ def get_transaction_user_in_exchange(transaction: Transaction):
            f'{get_transaction_type_thb_detail(transaction)}'
 
 
+def get_transaction_keyboard_change(transaction: Transaction):
+    return {
+        'text': 'Что вы хотите изменить?\n' + get_transaction_user_in_exchange(transaction),
+        'reply_markup': InlineKeyboardMarkup().row(
+            InlineKeyboardButton('⚙️ Кол-во отдаваемой валюты',
+                                 callback_data = edit_trans_user.new(id = transaction.id, have_amount = 1, rate = 0,
+                                                                     get_amount = 0))
+        ).row(
+            InlineKeyboardButton('⚙️ Курс',
+                                 callback_data = edit_trans_user.new(id = transaction.id, have_amount = 0, rate = 1,
+                                                                     get_amount = 0))
+        ).row(
+            InlineKeyboardButton('⚙️ Кол-во получаемой валюты',
+                                 callback_data = edit_trans_user.new(id = transaction.id, have_amount = 0, rate = 0,
+                                                                     get_amount = 1))
+        ).row(
+            InlineKeyboardButton('ℹ Заявка',
+                                 callback_data = transaction_messages.new(id = transaction.id,
+                                                                          action = TransAction.main))
+        )}
+
+
+transaction_edit_write_have_amount = {
+    'text': 'Напишите ко-во, которое вы хотите обменять'
+}
+
+transaction_edit_write_rate = {
+    'text': 'Напишите новый курс'
+}
+
+transaction_edit_write_get_amount = {
+    'text': 'Напишите ко-во, которое вы хотите получить'
+}
+
+
 havenot_transactions = {
     'text': 'У вас нет активных заявок.'
             '\nДля создания заявки напишите /newtrans'
@@ -218,6 +270,8 @@ cancel_trans_user_m = CallbackData('canceltrans', 'id')
 
 def get_transaction_keyboard_cancel(transaction: Transaction):
     return InlineKeyboardMarkup().row(
+        InlineKeyboardButton('⚙️ Изменить', callback_data = edit_trans_user_p.new(id = transaction.id))
+    ).row(
         InlineKeyboardButton('❌ Отменить', callback_data = cancel_trans_user_m.new(id = transaction.id)))
 
 
@@ -260,6 +314,9 @@ def get_transaction_keyboard_main(transaction: Transaction, merchant=False):
         InlineKeyboardButton('✉️ История сообщений',
                              callback_data = transaction_messages.new(id = transaction.id,
                                                                       action = TransAction.show_messages)))
+
+    if not merchant and transaction.status == TransStatus.in_exchange:
+        keyboard.row(InlineKeyboardButton('⚙️ Изменить', callback_data = edit_trans_user_p.new(id = transaction.id)))
 
     if (merchant and transaction.status == TransStatus.in_exchange) or (
             not merchant and transaction.status == TransStatus.wait_good_user):

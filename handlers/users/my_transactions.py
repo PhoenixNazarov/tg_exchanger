@@ -1,3 +1,6 @@
+import enum
+
+import aiogram.utils.exceptions
 from aiogram import types
 from aiogram.dispatcher.filters.state import State, StatesGroup
 
@@ -6,9 +9,16 @@ from database.models import MessageTransaction
 from messages.transactions import *
 from share import dp, bot, session_maker
 
+from .make_transaction import correct_number, make_transaction_incorrect_number
+from modules.transactions import *
+
 
 class FSMMessage(StatesGroup):
     write_message = State()
+
+
+class FSMEditTrans(StatesGroup):
+    change_number = State()
 
 
 @dp.message_handler(commands = ['mytrans'], state = '*')
@@ -73,7 +83,8 @@ async def transaction_action(query: types.CallbackQuery, callback_data: dict, st
         elif callback_data['action'] == TransAction.show_messages:
             if len(transaction.messages) == 0:
                 return await query.answer(havenot_messages)
-            await bot.edit_message_text(chat_id = query.from_user.id, message_id = query.message.message_id, parse_mode=types.ParseMode.MARKDOWN,
+            await bot.edit_message_text(chat_id = query.from_user.id, message_id = query.message.message_id,
+                                        parse_mode = types.ParseMode.MARKDOWN,
                                         **get_transaction_message_history(transaction))
 
         elif callback_data['action'] == TransAction.write_message:
@@ -109,7 +120,10 @@ async def accept_transaction(query: types.CallbackQuery, callback_data: dict, st
             if transaction.status == TransStatus.wait_good_user:
                 transaction.status = TransStatus.good_finished
                 session.commit()
-                await bot.delete_message(chat_id = MERCHANT_CHANNEL, message_id = transaction.merchant_message_id)
+                try:
+                    await bot.delete_message(chat_id = MERCHANT_CHANNEL, message_id = transaction.merchant_message_id)
+                except aiogram.utils.exceptions.MessageCantBeDeleted:
+                    pass
                 await bot.send_message(chat_id = transaction.merchant_id, **get_accept_status(transaction, True))
             else:
                 await query.answer(cant_accept)
@@ -128,6 +142,10 @@ async def write_message(message: types.Message, state):
     with session_maker() as session:
         transaction: Transaction = session.query(Transaction).get(trans_id)
 
+        if transaction.status not in [TransStatus.in_exchange, TransStatus.wait_good_user]:
+            await state.finish()
+            return await message.answer(**cant_write())
+
         mes = MessageTransaction()
         mes.text = message.text
         mes.transaction_id = transaction.id
@@ -142,3 +160,93 @@ async def write_message(message: types.Message, state):
                                    **get_transaction_message(transaction, mes))
         session.add(mes)
         session.commit()
+
+
+@dp.callback_query_handler(edit_trans_user_p.filter(), state = '*')
+async def edit_trans_get_keyboard(query: types.CallbackQuery, callback_data: dict, state):
+    with session_maker() as session:
+        transaction: Transaction = session.query(Transaction).get(int(callback_data['id']))
+        if transaction.status in [TransStatus.in_stack, TransStatus.in_exchange]:
+            await bot.edit_message_text(chat_id = query.from_user.id, message_id = query.message.message_id,
+                                        **get_transaction_keyboard_change(transaction))
+        else:
+            await query.answer(cant_accept)
+            await bot.edit_message_text(**get_screen_transaction_user(transaction),
+                                        chat_id = query.message.chat.id,
+                                        message_id = query.message.message_id)
+
+
+@dp.callback_query_handler(edit_trans_user.filter(), state = '*')
+async def edit_trans(query: types.CallbackQuery, callback_data: dict, state):
+    async with state.proxy() as data:
+        data['id'] = callback_data['id']
+
+        with session_maker() as session:
+            transaction: Transaction = session.query(Transaction).get(int(callback_data['id']))
+            if transaction.status in [TransStatus.in_stack, TransStatus.in_exchange]:
+                if int(callback_data['have_amount']):
+                    await bot.send_message(chat_id = query.from_user.id, **transaction_edit_write_have_amount)
+                    data['change_type'] = 'have_amount'
+                    await FSMEditTrans.change_number.set()
+
+                elif int(callback_data['get_amount']):
+                    await bot.send_message(chat_id = query.from_user.id, **transaction_edit_write_get_amount)
+                    data['change_type'] = 'get_amount'
+                    await FSMEditTrans.change_number.set()
+
+                elif int(callback_data['rate']):
+                    await bot.send_message(chat_id = query.from_user.id, **transaction_edit_write_rate)
+                    data['change_type'] = 'rate'
+                    await FSMEditTrans.change_number.set()
+
+                else:
+                    raise
+
+            else:
+                await query.answer(cant_accept)
+            await bot.edit_message_text(**get_screen_transaction_user(transaction),
+                                        chat_id = query.message.chat.id,
+                                        message_id = query.message.message_id)
+
+
+@dp.message_handler(lambda message: message.text not in MAIN_COMMANDS, state = FSMEditTrans.change_number)
+async def edit_trans_save(message: types.Message, state):
+    async with state.proxy() as data:
+        print(data)
+        change_type = data['change_type']
+        trans_id = data['id']
+
+    with session_maker() as session:
+        transaction: Transaction = session.query(Transaction).get(trans_id)
+        if transaction.status in [TransStatus.in_stack, TransStatus.in_exchange]:
+            if not correct_number(message.text):
+                return await bot.send_message(chat_id = message, **make_transaction_incorrect_number())
+
+            value = float(message.text.replace(',', '.'))
+
+            if change_type == 'have_amount':
+                transaction.have_amount = value
+                calculate_transaction_get_amount(transaction, session.query(User).get(transaction.user_id).auth)
+
+            elif change_type == 'rate':
+                transaction.rate = value
+                calculate_transaction_get_amount(transaction, session.query(User).get(transaction.user_id).auth)
+
+            elif change_type == 'get_amount':
+                transaction.get_amount = value
+                calculate_transaction_have_amount(transaction, session.query(User).get(transaction.user_id).auth)
+
+            session.commit()
+
+            await bot.send_message(transaction.user_id, **get_screen_transaction_user(transaction))
+
+            if transaction.status == TransStatus.in_exchange:
+                await bot.send_message(transaction.merchant_id, **get_transaction_merchant_edit(transaction))
+
+            await bot.edit_message_text(chat_id = MERCHANT_CHANNEL, message_id = transaction.merchant_message_id,
+                                        **get_transaction_channel(transaction))
+
+        else:
+            await bot.edit_message_text(**get_screen_transaction_user(transaction),
+                                        chat_id = message.chat.id,
+                                        message_id = message.message_id)

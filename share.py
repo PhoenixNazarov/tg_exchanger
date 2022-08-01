@@ -6,7 +6,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, scoped_session
 
 
-storage = RedisStorage2('localhost', 49153, password = 'redispw')
+storage = RedisStorage2('localhost', 49154, password = 'redispw')
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher(bot, storage = storage)
 

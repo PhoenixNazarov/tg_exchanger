@@ -1,11 +1,6 @@
-import enum
+from sqlalchemy import Text
 
-from sqlalchemy import Column, Float, ForeignKey, Enum, Integer, Text
-from sqlalchemy.orm import relationship
-
-from config import *
-from .base import BaseModelWithId
-from .transaction import *
+from modules.transactions import *
 
 
 class TransactionModerate(BaseModelWithId):
@@ -35,20 +30,5 @@ class TransactionModerate(BaseModelWithId):
         self.get_currency = get_currency
         self.rate = rate
 
-        if have_currency in not_stable_currency and get_currency == Currency.BAT:
-            get_amount = round(amount / rate, 2)
-        elif have_currency == Currency.BAT and get_currency in not_stable_currency:
-            get_amount = round(amount * rate, 2)
-        elif get_currency == Currency.BAT:
-            get_amount = round(amount * rate, 2)
-        elif have_currency == Currency.BAT:
-            get_amount = round(amount / rate, 2)
-        else:
-            raise f"pair {have_currency} -> {get_currency} not allowed"
+        calculate_transaction_get_amount(self, auth_user)
 
-        commission = round(get_amount * (AUTH_USER_COMMISSION if auth_user else USER_COMMISSION / 100), 2)
-        get_amount_without_commission = round(get_amount - commission, 2)
-
-        self.get_amount = get_amount_without_commission
-        self.commission_user = commission
-        self.commission_merchant = round(self.have_amount * (MERCHANT_COMMISSION / 100), 2)
