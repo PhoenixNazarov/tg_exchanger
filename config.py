@@ -1,6 +1,6 @@
 API_TOKEN = '1902043789:AAEJ6nnocKMjvv1iWTGhJhdMh5a2YGxZb9c'
-
 MERCHANT_CHANNEL = -1001609758572
+ADMINS = [557060775]
 
 SQL_PATH = 'sqlite:///data/database.db'
 

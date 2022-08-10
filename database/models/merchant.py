@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, Float, Text, Boolean, ForeignKey
 from sqlalchemy.orm import relationship
 
 from . import Transaction
+from . import User
 from .base import BaseModel
 
 
@@ -16,4 +17,8 @@ class Merchant(BaseModel):
     bad_transactions = Column(Integer, default = 0)
     rating = Column(Integer, default = 0)
 
+    user = relationship(User, backref = 'merchant', lazy = 'select')
     transactions = relationship(Transaction, backref = 'merchant', lazy = 'select')
+
+    def __int__(self, id):
+        self.id = id
