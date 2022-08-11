@@ -41,6 +41,12 @@ def get_transaction_type_thb_short(transaction: Transaction):
 accept_trans_merchant = CallbackData('mtrans', 'id', 'accept', 'ban')
 
 
+def not_allow_transaction():
+    return {
+        'text': 'You cant accept this transaction'
+    }
+
+
 def get_transaction_channel(transaction: Transaction):
     if transaction.status == TransStatus.in_stack:
         return get_transaction_merchant_in_stack(transaction)

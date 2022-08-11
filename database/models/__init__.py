@@ -5,3 +5,4 @@ from .transaction_message import MessageTransaction
 from .transaction_requisits import RequisitesCash, RequisitesBankBalance
 from .user import User
 from .merchant import Merchant
+from .merchants_commision import MerchantCommission

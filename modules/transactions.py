@@ -1,4 +1,5 @@
 from database.models.transaction import *
+from database.models.merchant import Merchant
 from share import dp, bot, session_maker
 
 
@@ -41,3 +42,13 @@ def calculate_transaction_have_amount(transaction: Transaction, auth_user) -> No
     transaction.commission_user = commission
     transaction.commission_merchant = round(transaction.have_amount * (MERCHANT_COMMISSION / 100), 2)
     transaction.have_amount = have_amount
+
+
+def merchant_allow_transaction(transaction: Transaction, merchant: Merchant) -> bool:
+    if transaction.have_currency == Currency.BAT and \
+            transaction.have_amount / USD_THB > merchant.allow_max_amount:
+        return False
+    elif transaction.get_currency == Currency.BAT and \
+            transaction.get_currency / USD_THB > merchant.allow_max_amount:
+        return False
+    return True

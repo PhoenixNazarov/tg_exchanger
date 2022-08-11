@@ -2,8 +2,9 @@ from sqlalchemy import Column, Integer, Float, Text, Boolean, ForeignKey
 from sqlalchemy.orm import relationship
 
 from . import Transaction
-from . import User
+from .user import User
 from .base import BaseModel
+from .merchants_commision import MerchantCommission
 
 
 class Merchant(BaseModel):
@@ -11,8 +12,9 @@ class Merchant(BaseModel):
 
     id = Column(ForeignKey('users.id'), nullable = False, unique = True, primary_key = True)
 
-    accumulated_commission = Column(Float, default = 0)
+    accumulated_commission = relationship(MerchantCommission, backref = 'merchant', lazy = 'select')
 
+    allow_max_amount = Column(Integer, default = 1000)
     good_transactions = Column(Integer, default = 0)
     bad_transactions = Column(Integer, default = 0)
     rating = Column(Integer, default = 0)

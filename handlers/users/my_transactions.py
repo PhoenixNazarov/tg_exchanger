@@ -4,6 +4,7 @@ from aiogram.dispatcher.filters.state import State, StatesGroup
 
 from config import *
 from database.models import MessageTransaction
+from database.models import Merchant
 from messages.transactions import *
 from share import dp, bot, session_maker
 
@@ -117,7 +118,21 @@ async def accept_transaction(query: types.CallbackQuery, callback_data: dict, st
         elif transaction.user_id == query.from_user.id:
             if transaction.status == TransStatus.wait_good_user:
                 transaction.status = TransStatus.good_finished
+
+                # Merchant statistics
+                merchant: Merchant = session.query(Merchant).get(transaction.merchant_id)
+                merchant.good_transactions += 1
+                if transaction.have_currency == Currency.BAT:
+                    merchant.accumulated_commission.thb += transaction.commission_merchant
+                elif transaction.have_currency == Currency.RUB:
+                    merchant.accumulated_commission.rub += transaction.commission_merchant
+                else:
+                    merchant.accumulated_commission.usd += transaction.commission_merchant
+
+                user = session.query(User).get(transaction.user_id)
+                user.good_transactions += 1
                 session.commit()
+
                 try:
                     await bot.delete_message(chat_id = MERCHANT_CHANNEL, message_id = transaction.merchant_message_id)
                 except aiogram.utils.exceptions.MessageCantBeDeleted:
