@@ -1,15 +1,11 @@
-from aiogram import types
+from aiogram import types, Dispatcher
 
-from config import *
-from database.models.transaction import *
-from database.models.merchant import Merchant
-from messages.transactions import *
-from modules.transactions import merchant_allow_transaction
-from share import dp, bot, session_factory
+from apps.bot.messages.transactions import *
+from database.transactions import merchant_allow_transaction
+from share import bot, session_factory
 
 
-@dp.callback_query_handler(accept_trans_merchant.filter(), state = '*')
-async def del_transaction(query: types.CallbackQuery, callback_data: dict):
+async def accept_transaction(query: types.CallbackQuery, callback_data: dict):
     with session_factory() as session:
         merchant = session.query(Merchant).get(query.message.chat.id)
         if merchant is None:
@@ -29,9 +25,13 @@ async def del_transaction(query: types.CallbackQuery, callback_data: dict):
                                         **get_transaction_channel(transaction))
 
             # merchant
-            await bot.send_message(chat_id = transaction.merchant_id, **get_screen_transaction_user(transaction))
+            await bot.send_message(chat_id = transaction.merchant_id, **get_transaction_user(transaction))
 
             # maker
-            await bot.send_message(chat_id = transaction.user_id, **get_screen_transaction_user(transaction))
+            await bot.send_message(chat_id = transaction.user_id, **get_transaction_user(transaction))
         else:
             pass
+
+
+def register_handlers_accept_transaction(dp: Dispatcher):
+    dp.register_callback_query_handler(accept_transaction, accept_trans_merchant.filter(), state = '*')

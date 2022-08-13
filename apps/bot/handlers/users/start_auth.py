@@ -1,11 +1,10 @@
-from aiogram import types
-from aiogram.dispatcher import FSMContext
+from aiogram import types, Dispatcher
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from sqlalchemy.sql import exists
 
-from share import dp, bot, session_factory
 from database.models import User
-from messages.users import *
+from apps.bot.messages.users import *
+from share import session_factory
 
 
 def check_register(message):
@@ -18,8 +17,6 @@ class FSMRegistration(StatesGroup):
     get_telephone = State()
 
 
-@dp.message_handler(state = FSMRegistration.get_username)
-@dp.message_handler(lambda message: not check_register(message), commands=['start'], state = '*')
 async def send_welcome(message: types.Message, state):
     await FSMRegistration.get_username.set()
     if message.from_user.username is None:
@@ -38,8 +35,7 @@ async def send_welcome(message: types.Message, state):
     await message.answer(**start_screen_allow)
 
 
-@dp.message_handler(content_types=['contact'], state = FSMRegistration.get_telephone)
-async def send_welcome(message: types.Message, state):
+async def send_welcome_final(message: types.Message, state):
     if message.contact is None:
         return await message.answer(**start_screen_allow)
 
@@ -50,3 +46,10 @@ async def send_welcome(message: types.Message, state):
 
     await state.finish()
     await message.answer(**main_screen, reply_markup = types.ReplyKeyboardRemove())
+
+
+def register_handlers_auth(dp: Dispatcher):
+    dp.register_message_handler(send_welcome, state = FSMRegistration.get_username)
+    dp.register_message_handler(send_welcome, lambda message: not check_register(message), commands = ['start'],
+                                state = '*')
+    dp.register_message_handler(send_welcome_final, content_types = ['contact'], state = FSMRegistration.get_telephone)

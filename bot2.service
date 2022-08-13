@@ -1,5 +1,5 @@
 [Unit]
-Description=Telegram bot 'exchenger'
+Description=Telegram bot 'exchanger'
 After=syslog.target
 After=network.target
 

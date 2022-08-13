@@ -41,15 +41,6 @@ class TransGet(StrEnum):
     bank_balance = 'bank_balance'
 
 
-get_russian_status = {
-    TransStatus.in_stack: 'Ожидание мерчанта',
-    TransStatus.in_exchange: 'В работе',
-    TransStatus.wait_good_user: 'Ожидание подтверждения пользователя',
-    TransStatus.good_finished: 'Завершена',
-    TransStatus.canceled: 'Отменена'
-}
-
-
 class Transaction(BaseModelWithId):
     __tablename__ = 'transactions'
 

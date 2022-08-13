@@ -1,11 +1,15 @@
-from aiogram import types
-from share import dp, IsAdmin, session_maker
-from messages.admins import *
+from aiogram import types, Dispatcher
+from share import session_maker
+from ...filters import IsAdmin
+from apps.bot.messages.admins import *
 from database.models import User, Merchant, MerchantCommission
 from sqlalchemy.sql import exists
 
 
-@dp.message_handler(IsAdmin(), commands = ['add_merch'], state = '*')
+async def admin_help(message: types.Message):
+    await message.answer(**help_admin())
+
+
 async def add_merchant(message: types.Message):
     merch_id = message.text.split()
     if len(merch_id) != 2:
@@ -28,8 +32,7 @@ async def add_merchant(message: types.Message):
         await message.answer(**admin_merchant_add(merchant))
 
 
-@dp.message_handler(IsAdmin(), commands = ['del_merch'], state = '*')
-async def add_merchant(message: types.Message):
+async def delete_merchant(message: types.Message):
     merch_id = message.text.split()
     if len(merch_id) != 2:
         return await message.answer(**admin_wrong_count_arguments())
@@ -49,7 +52,6 @@ async def add_merchant(message: types.Message):
         await message.answer(**admin_merchant_del(merch_id))
 
 
-@dp.message_handler(IsAdmin(), commands = ['list_merch'], state = '*')
 async def list_merchant(message: types.Message):
     with session_maker() as session:
         merchants = session.query(Merchant).all()
@@ -57,7 +59,6 @@ async def list_merchant(message: types.Message):
             await message.answer(**admin_merchant_list(merch))
 
 
-@dp.message_handler(IsAdmin(), commands = ['set_limit_amount'], state = '*')
 async def set_limit_amount(message: types.Message):
     args = message.text.split()
     if len(args) != 3:
@@ -79,7 +80,6 @@ async def set_limit_amount(message: types.Message):
         await message.answer(**admin_merchant_list(merchant))
 
 
-@dp.message_handler(IsAdmin(), commands = ['set_limit_amount'], state = '*')
 async def set_accumulated_commission(message: types.Message):
     args = message.text.split()
     if not (2 <= len(args) <= 4):
@@ -122,3 +122,14 @@ async def set_accumulated_commission(message: types.Message):
 
         session.commit()
         await message.answer(**admin_merchant_list(merchant))
+
+
+def register_handlers_admin_commands(dp: Dispatcher):
+    dp = dp
+    dp.register_message_handler(admin_help, IsAdmin(), commands = ['admin_help'], state = '*')
+    dp.register_message_handler(add_merchant, IsAdmin(), commands = ['add_merch'], state = '*')
+    dp.register_message_handler(delete_merchant, IsAdmin(), commands = ['del_merch'], state = '*')
+    dp.register_message_handler(list_merchant, IsAdmin(), commands = ['list_merch'], state = '*')
+    dp.register_message_handler(set_limit_amount, IsAdmin(), commands = ['set_limit_amount'], state = '*')
+    dp.register_message_handler(set_accumulated_commission, IsAdmin(), commands = ['set_accumulated_commission'], state = '*')
+

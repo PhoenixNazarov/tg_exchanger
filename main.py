@@ -1,7 +1,3 @@
-from aiogram import executor
-from share import dp
+from apps import *
 
-import handlers
-
-
-executor.start_polling(dp, skip_updates=True)
+start_bot()

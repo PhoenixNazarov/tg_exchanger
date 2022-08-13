@@ -1,6 +1,6 @@
 from sqlalchemy import Text
 
-from modules.transactions import *
+from database.transactions import *
 
 
 class TransactionModerate(BaseModelWithId):

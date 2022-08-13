@@ -1,15 +1,12 @@
 import aiogram.utils.exceptions
-from aiogram import types
+from share import bot, session_maker
+from aiogram import types, Dispatcher
 from aiogram.dispatcher.filters.state import State, StatesGroup
 
-from config import *
-from database.models import MessageTransaction
-from database.models import Merchant
-from messages.transactions import *
-from share import dp, bot, session_maker
+from apps.bot.messages.transactions import *
 
 from .make_transaction import correct_number, make_transaction_incorrect_number
-from modules.transactions import *
+from database.transactions import *
 
 
 class FSMMessage(StatesGroup):
@@ -20,7 +17,6 @@ class FSMEditTrans(StatesGroup):
     change_number = State()
 
 
-@dp.message_handler(commands = ['mytrans'], state = '*')
 async def my_transactions(message: types.Message):
     with session_factory() as session:
         transactions = session.query(Transaction).filter(
@@ -34,26 +30,24 @@ async def my_transactions(message: types.Message):
 
         for trans in transactions:
             if trans.user_id == message.from_user.id:
-                await message.answer(**get_screen_transaction_user(trans))
+                await message.answer(**get_transaction_user(trans))
             else:
                 await message.answer(**get_transaction_merchant(trans))
 
 
-@dp.callback_query_handler(cancel_trans_user_m.filter(), state = '*')
 async def del_transaction(query: types.CallbackQuery, callback_data: dict):
     await bot.edit_message_text(**transaction_cancel_a(query.message.text, callback_data['id']),
                                 chat_id = query.message.chat.id,
                                 message_id = query.message.message_id)
 
 
-@dp.callback_query_handler(cancel_trans_user_a.filter(), state = '*')
 async def del_transaction_a(query: types.CallbackQuery, callback_data: dict):
     with session_maker() as session:
         transaction = session.query(Transaction).get(int(callback_data['id']))
 
         if int(callback_data['yes']):
             if transaction.status != TransStatus.in_stack:
-                await bot.edit_message_text(**get_screen_transaction_user(transaction),
+                await bot.edit_message_text(**get_transaction_user(transaction),
                                             chat_id = query.message.chat.id,
                                             message_id = query.message.message_id)
                 return await query.answer(**cant_cancel_transaction)
@@ -63,19 +57,18 @@ async def del_transaction_a(query: types.CallbackQuery, callback_data: dict):
 
             await bot.delete_message(chat_id = MERCHANT_CHANNEL, message_id = transaction.merchant_message_id)
 
-        await bot.edit_message_text(**get_screen_transaction_user(transaction),
+        await bot.edit_message_text(**get_transaction_user(transaction),
                                     chat_id = query.message.chat.id,
                                     message_id = query.message.message_id)
 
 
-@dp.callback_query_handler(transaction_messages.filter(), state = '*')
 async def transaction_action(query: types.CallbackQuery, callback_data: dict, state):
     with session_maker() as session:
         transaction: Transaction = session.query(Transaction).get(int(callback_data['id']))
 
         if callback_data['action'] == TransAction.main:
             await bot.edit_message_text(chat_id = query.from_user.id, message_id = query.message.message_id,
-                                        **(get_screen_transaction_user(transaction)
+                                        **(get_transaction_user(transaction)
                                            if transaction.user_id == query.from_user.id else
                                            get_transaction_merchant(transaction)))
 
@@ -100,7 +93,6 @@ async def transaction_action(query: types.CallbackQuery, callback_data: dict, st
                                         **accept_status(transaction, transaction.merchant_id == query.from_user.id))
 
 
-@dp.callback_query_handler(transaction_messages_accept_proof.filter(), state = '*')
 async def accept_transaction(query: types.CallbackQuery, callback_data: dict, state):
     with session_maker() as session:
         transaction: Transaction = session.query(Transaction).get(int(callback_data['id']))
@@ -141,13 +133,12 @@ async def accept_transaction(query: types.CallbackQuery, callback_data: dict, st
             else:
                 await query.answer(cant_accept)
             await bot.edit_message_text(chat_id = query.from_user.id, message_id = query.message.message_id,
-                                        **get_screen_transaction_user(transaction))
+                                        **get_transaction_user(transaction))
 
         else:
             await query.answer(cant_accept)
 
 
-@dp.message_handler(lambda message: message.text not in MAIN_COMMANDS, state = FSMMessage.write_message)
 async def write_message(message: types.Message, state):
     async with state.proxy() as data:
         trans_id = data['id']
@@ -175,7 +166,6 @@ async def write_message(message: types.Message, state):
         session.commit()
 
 
-@dp.callback_query_handler(edit_trans_user_p.filter(), state = '*')
 async def edit_trans_get_keyboard(query: types.CallbackQuery, callback_data: dict, state):
     with session_maker() as session:
         transaction: Transaction = session.query(Transaction).get(int(callback_data['id']))
@@ -184,12 +174,11 @@ async def edit_trans_get_keyboard(query: types.CallbackQuery, callback_data: dic
                                         **get_transaction_keyboard_change(transaction))
         else:
             await query.answer(cant_accept)
-            await bot.edit_message_text(**get_screen_transaction_user(transaction),
+            await bot.edit_message_text(**get_transaction_user(transaction),
                                         chat_id = query.message.chat.id,
                                         message_id = query.message.message_id)
 
 
-@dp.callback_query_handler(edit_trans_user.filter(), state = '*')
 async def edit_trans(query: types.CallbackQuery, callback_data: dict, state):
     async with state.proxy() as data:
         data['id'] = callback_data['id']
@@ -217,12 +206,11 @@ async def edit_trans(query: types.CallbackQuery, callback_data: dict, state):
 
             else:
                 await query.answer(cant_accept)
-            await bot.edit_message_text(**get_screen_transaction_user(transaction),
+            await bot.edit_message_text(**get_transaction_user(transaction),
                                         chat_id = query.message.chat.id,
                                         message_id = query.message.message_id)
 
 
-@dp.message_handler(lambda message: message.text not in MAIN_COMMANDS, state = FSMEditTrans.change_number)
 async def edit_trans_save(message: types.Message, state):
     async with state.proxy() as data:
         print(data)
@@ -251,7 +239,7 @@ async def edit_trans_save(message: types.Message, state):
 
             session.commit()
 
-            await bot.send_message(transaction.user_id, **get_screen_transaction_user(transaction))
+            await bot.send_message(transaction.user_id, **get_transaction_user(transaction))
 
             if transaction.status == TransStatus.in_exchange:
                 await bot.send_message(transaction.merchant_id, **get_transaction_merchant_edit(transaction))
@@ -260,6 +248,26 @@ async def edit_trans_save(message: types.Message, state):
                                         **get_transaction_channel(transaction))
 
         else:
-            await bot.edit_message_text(**get_screen_transaction_user(transaction),
+            await bot.edit_message_text(**get_transaction_user(transaction),
                                         chat_id = message.chat.id,
                                         message_id = message.message_id)
+
+
+def register_handler_my_transaction(dp: Dispatcher):
+    dp.register_message_handler(my_transactions, commands = ['mytrans'], state = '*')
+
+
+def register_handlers_my_transaction(dp: Dispatcher):
+    dp.register_message_handler(write_message, state = FSMMessage.write_message)
+    dp.register_message_handler(edit_trans_save, state = FSMEditTrans.change_number)
+
+    dp.register_callback_query_handler(del_transaction, cancel_trans_user_m.filter(), state = '*')
+    dp.register_callback_query_handler(del_transaction_a, cancel_trans_user_a.filter(), state = '*')
+
+    dp.register_callback_query_handler(transaction_action, transaction_messages.filter(), state = '*')
+
+    dp.register_callback_query_handler(accept_transaction, transaction_messages_accept_proof.filter(), state = '*')
+
+    dp.register_callback_query_handler(edit_trans_get_keyboard, edit_trans_user_p.filter(), state = '*')
+    dp.register_callback_query_handler(edit_trans, edit_trans_user.filter(), state = '*')
+

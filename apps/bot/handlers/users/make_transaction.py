@@ -1,12 +1,9 @@
-from aiogram import types
+from aiogram import types, Dispatcher
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
 
-import config
-from config import MERCHANT_CHANNEL
-from messages.transactions import *
-from messages.users import *
-from share import dp, bot, session_maker
+from apps.bot.messages.transactions import *
+from share import bot, session_maker
 from database.models.transaction_requisits import *
 
 
@@ -30,14 +27,12 @@ class FSMBank(StatesGroup):
     name = State()
 
 
-@dp.message_handler(commands = ['newtrans'], state = '*')
 async def trans_start(message: types.Message, state):
     await state.finish()
     await FSMTransaction.have_currency.set()
     await message.answer(**make_transaction_have_currency)
 
 
-@dp.message_handler(state = FSMTransaction.have_currency)
 async def load_buy(message: types.Message, state: FSMContext):
     async with state.proxy() as data:
         if message.text == Currency.BAT:
@@ -53,7 +48,6 @@ async def load_buy(message: types.Message, state: FSMContext):
             await message.answer(**make_transaction_have_currency)
 
 
-@dp.message_handler(state = FSMTransaction.get_currency)
 async def load_currency(message: types.Message, state: FSMContext):
     async with state.proxy() as data:
         if message.text not in fiat_currency:
@@ -71,7 +65,6 @@ def correct_number(number: str):
         return False
 
 
-@dp.message_handler(state = FSMTransaction.amount)
 async def load_amount(message: types.Message, state: FSMContext):
     if not correct_number(message.text):
         return await message.answer(**make_transaction_incorrect_number)
@@ -109,7 +102,6 @@ async def send_pre_transaction(message: types.Message, callback_data):
         await message.answer(**make_transaction_show(trans))
 
 
-@dp.message_handler(state = FSMTransaction.rate)
 async def load_rate(message: types.Message, state: FSMContext):
     if not correct_number(message.text):
         return await message.answer(**make_transaction_incorrect_number)
@@ -125,7 +117,6 @@ async def load_rate(message: types.Message, state: FSMContext):
             await FSMTransaction.next()
 
 
-@dp.message_handler(state = FSMTransaction.type_get_thb)
 async def load_type_get_thb(message: types.Message, state: FSMContext):
     if message.text not in transaction_get.values():
         return await message.answer(**make_transaction_get_type_thb())
@@ -148,7 +139,6 @@ async def load_type_get_thb(message: types.Message, state: FSMContext):
             return await message.answer(**make_transaction_bank())
 
 
-@dp.message_handler(state = FSMCash.town)
 async def load_town(message: types.Message, state: FSMContext):
     if message.text not in config.TOWNS:
         return await message.answer(**make_transaction_town())
@@ -160,7 +150,6 @@ async def load_town(message: types.Message, state: FSMContext):
     await message.answer(**make_transaction_region(message.text))
 
 
-@dp.message_handler(state = FSMCash.region)
 async def load_region(message: types.Message, state: FSMContext):
     async with state.proxy() as data:
         if message.text not in config.TOWNS[data['town']]:
@@ -172,7 +161,6 @@ async def load_region(message: types.Message, state: FSMContext):
     await state.finish()
 
 
-@dp.message_handler(state = FSMBank.bank)
 async def load_bank(message: types.Message, state: FSMContext):
     if message.text not in config.BANKS:
         return await message.answer(**make_transaction_bank())
@@ -184,7 +172,6 @@ async def load_bank(message: types.Message, state: FSMContext):
     await FSMBank.next()
 
 
-@dp.message_handler(state = FSMBank.number)
 async def load_number(message: types.Message, state: FSMContext):
     if len(message.text) != 9:
         return await message.answer(**make_transaction_number())
@@ -200,7 +187,6 @@ async def load_number(message: types.Message, state: FSMContext):
     await FSMBank.next()
 
 
-@dp.message_handler(state = FSMBank.name)
 async def load_name(message: types.Message, state: FSMContext):
     async with state.proxy() as data:
         data['name'] = message.text
@@ -210,7 +196,6 @@ async def load_name(message: types.Message, state: FSMContext):
         await state.finish()
 
 
-@dp.callback_query_handler(make_transaction_cd.filter(), state = '*')
 async def public_transaction(query: types.CallbackQuery, callback_data: dict):
     with session_maker() as session:
         transaction_moderate: TransactionModerate = session.query(TransactionModerate).get(callback_data['id'])
@@ -246,7 +231,7 @@ async def public_transaction(query: types.CallbackQuery, callback_data: dict):
                 session.add(reqBank)
                 session.commit()
 
-            await bot.edit_message_text(**get_screen_transaction_user(transaction), chat_id = query.message.chat.id,
+            await bot.edit_message_text(**get_transaction_user(transaction), chat_id = query.message.chat.id,
                                         message_id = query.message.message_id)
 
             merchant_message = await bot.send_message(chat_id = MERCHANT_CHANNEL, **get_transaction_channel(transaction))
@@ -256,3 +241,25 @@ async def public_transaction(query: types.CallbackQuery, callback_data: dict):
             await bot.delete_message(chat_id = query.from_user.id, message_id = query.message.message_id)
 
         session.delete(transaction_moderate)
+
+
+def register_handler_make_transaction(dp: Dispatcher):
+    dp.register_message_handler(trans_start, commands = ['newtrans'], state = '*')
+
+
+def register_handlers_make_transaction(dp: Dispatcher):
+    dp.register_message_handler(load_buy, state = FSMTransaction.have_currency)
+    dp.register_message_handler(load_currency, state = FSMTransaction.get_currency)
+    dp.register_message_handler(load_amount, state = FSMTransaction.amount)
+    dp.register_message_handler(load_rate, state = FSMTransaction.rate)
+    dp.register_message_handler(load_type_get_thb, state = FSMTransaction.type_get_thb)
+
+    dp.register_message_handler(load_town, state = FSMCash.town)
+    dp.register_message_handler(load_region, state = FSMCash.region)
+
+    dp.register_message_handler(load_bank, state = FSMBank.bank)
+    dp.register_message_handler(load_number, state = FSMBank.number)
+    dp.register_message_handler(load_name, state = FSMBank.name)
+
+    dp.register_callback_query_handler(public_transaction, make_transaction_cd.filter(), state = '*')
+

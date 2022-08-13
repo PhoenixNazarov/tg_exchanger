@@ -1,6 +1,5 @@
 from database.models.transaction import *
 from database.models.merchant import Merchant
-from share import dp, bot, session_maker
 
 
 def calculate_transaction_get_amount(transaction: Transaction, auth_user) -> None:
